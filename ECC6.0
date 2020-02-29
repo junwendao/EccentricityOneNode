@@ -1,0 +1,352 @@
+#include <iostream>
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <queue>
+#include <set>
+#include <unordered_map>
+#include <cassert>
+#include <fstream>
+#include <functional>
+#include <vector>
+#include <time.h>
+#include <windows.h>
+#include <ctime>
+#define n 17903    //12008  17903 
+#define m 196972 //237010 196972
+#define k 1
+/*typedef struct edg1 {
+	int first;
+	int second;
+};*/
+
+const int inf = 1 << 29;//1<<29 表示1左移29位，每左移一位乘以2，所以就是1*2^29=
+int cnt;
+
+int len_from_vk[n + 1], _inv_id[n + 1], dis[n + 1];
+std::vector<std::vector<std::pair<int, int>>> edg; // storing graph : to, cost
+std::vector<std::vector<std::pair<int, int>>> label; // index
+std::vector<std::vector<std::pair<int, int> > > Lz;
+std::vector<int> id; // get vertex according to position
+//std::vector<int> _inv_id; // get vertex's id
+//std::vector<int> dis; // storing current distance in BFS;
+//std::vector<int> vis;
+//std::vector<int> len_from_vk(n + 1, inf);
+//std::vector<int> pool;
+std::vector<std::pair<int, int>> node(n + 1);
+std::vector<std::pair<int, int>> eccbound(n + 1);
+
+using namespace std;
+bool cmp(const pair<int, int> a, const pair<int, int> b)
+{
+	return a.first > b.first; //降序排列，如果改为return a<b，则为升序
+}
+void init(int N)
+{
+	edg.resize(N + 1, std::vector<std::pair<int, int>>(0));
+	label.resize(N + 1, std::vector<std::pair<int, int>>(0));
+	Lz.resize(k + 1, std::vector<std::pair<int, int>>(0));
+	id.resize(N + 1, 0);
+	//_inv_id.resize(N + 1);
+	//dis.resize(N + 1, inf);
+	//vis.resize(N + 1, 0);
+	for (int i = 0; i < N + 1; i++) {
+		dis[i] = inf;
+		_inv_id[i] = i;
+		len_from_vk[i] = inf;
+		eccbound[i].first = inf;
+		eccbound[i].second = 0;
+	}
+	//len_from_vk.resize(N + 1, std::vector<std::vector<int>>(N + 1, inf));
+	//vector<vector<int>> len_from_vk(N + 1, vector<int>());//初始层数，赋值
+	/*for (int i = 0; i < N + 1; i++) {
+		len_from_vk[i].resize(N + 1, inf);
+	}*/
+}
+void graph_init()
+{
+	int u, v;
+	//scanf("%d %d", &n, &m);
+	init(n);
+	for (int i = 0; i < m; i++) {
+		ifstream myfile("D:\\CA-HepPh.txt");//D:\\CA-HepPh.txt
+		ofstream outfile("out.txt", ios::trunc);
+		myfile >> u;
+		myfile >> v;
+		//scanf("%d %d %d", &u, &v, &w);
+		edg[u].emplace_back(v, 1); edg[v].emplace_back(u, 1);
+	}
+}
+int LocateVex(int num) {
+	for (int i = 1; i <= n; i++)
+	{
+		if (id[i] == 0)
+		{
+			id[i] = num;
+			return i;
+		}
+		if (id[i] == num)
+			return i;
+	}
+	return 0;
+}
+void graph_init(ifstream &ifs)
+{
+	assert(ifs);
+	int u, v, uId, vId;
+	//ifs>>n>>m;
+	init(n);
+	for (int i = 0; i < m; i++) {
+		//ifs>>u>>v>>w;
+		ifs >> u >> v;
+		uId = LocateVex(u);
+		vId = LocateVex(v);
+		cout << "u=" << u << " " << "v=" << v << endl;
+		edg[uId].emplace_back(vId, 1); edg[vId].emplace_back(uId, 1);
+		//cout << "edg[u]=" << edg[u][0].first<< " " << "v=" << edg[v][0].first << endl;
+	}
+}
+int query_for_pruning(int u, int v/*, std::vector<int> len_from_vk*/)
+{
+	int c = 0;
+	if (u == v) return 0;
+	int ans = inf;//ans初始化为无穷大
+	for (int i = 0; i < (int)label[v].size(); i++) {
+		cout << "v=" << v << "   query_c=" << ++c << endl;
+		//ans = min(ans, len_from_vk[u][label[v][i].first] + label[v][i].second);
+		ans = min(ans, len_from_vk[label[v][i].first] + label[v][i].second);
+		//len_from_vk[label[v][i].first]是记录u到中间点的距离，
+		//label[v][i].second 是记录v到中间点的距离 
+	}
+	return ans;
+}
+void prunedBFS(int vk_idx)
+{
+	int c = 0;
+	std::vector<int> dist_id(n + 1);
+	//int dis[n + 1];
+	//for (int i = 1; i <= n; i++) dis[i] = inf;
+	//std::vector<int> dis(n + 1, inf);
+	//int vk = id[vk_idx];//id[]的第vk_idx个元素里存的赋值给vk。如id[1]=1007,则vk=1007
+	std::queue <std::pair<int, int> > q;
+	/*for (int i = 1; i <= n; i++) {
+		//cout << "vis[" << i << "]=" << vis[i] << endl;
+		cout << "dis[" << i << "]=" << dis[i] << endl;
+	}*/
+	//vis[vk_idx] = vk_idx;//
+	dis[vk_idx] = 0;
+	dist_id.emplace_back(vk_idx);
+	q.push(make_pair(dis[vk_idx], vk_idx));  //单元素队列,存<dist（vk，vk）=0,vk>
+	for (int i = 0; i < (int)label[vk_idx].size(); i++) {
+		len_from_vk[label[vk_idx][i].first] = label[vk_idx][i].second;
+		//cout << "存len_from_vk["<<label[vk_idx][i].first<<"]=" << len_from_vk[label[vk_idx][i].first] << endl;
+	}
+	while (!q.empty()) {
+		int u = q.front().second;
+		int dist = q.front().first;
+		q.pop(); //出队
+		//if (dis[u] < dist) continue;
+		//查询PLL索引存的dist（vk，u）和当前距离dist = q.top().first
+		if (query_for_pruning(vk_idx, u) <= dis[u] && _inv_id[u] != vk_idx) {
+			cout << "  c="<<++c << endl;
+			cnt++; // calculate how many times we have pruned
+			continue;
+		}
+
+		label[u].emplace_back(vk_idx, dis[u]);
+		
+		for (int i = 0; i < (int)edg[u].size(); i++) {//把u的每个邻居都比对
+			int v = edg[u][i].first;// w = edg[u][i].second;
+			if (_inv_id[v] < vk_idx) continue;//不需要存2 1，存1 2就可以
+			//if(vis[v] != vk_idx){
+			//if (dis[v] > dis[u] + 1 || vis[v] != vk_idx) 
+			if (dis[v] == inf) {
+				//vis[v] = vk_idx;
+				dis[v] = dis[u] + 1;
+				dist_id.emplace_back(v);
+				q.push(make_pair(dis[v], v));
+			}
+		}
+	}
+	for (int i = 0; i < (int)label[vk_idx].size(); i++) {
+		len_from_vk[label[vk_idx][i].first] = inf;
+	}
+	for (int i = 0; i < (int)dist_id.size(); i++)
+		dis[dist_id[i]] = inf;
+}
+void preparing()
+{
+	//std::vector<std::pair<int, int>> node(n + 1);
+	for (int i = 1; i <= n; i++) node[i] = make_pair(edg[i].size(), i);
+	/*for (int i = 1; i <= n; i++) {
+		cout << "node[" << i << "].first=" << node[i].first << "  node[" << i << "].second=" << node[i].second;
+		cout << endl;
+	}*/
+	//sort(node.begin() + 1, node.end());
+	sort(node.begin() + 1, node.end(), cmp);
+	//sort(node.rbegin(), node.rend() - 1);
+	for (int i = 1; i <= n; i++) {
+		cout << "22node[" << i << "].first=" << node[i].first << "  22node[" << i << "].second=" << node[i].second;
+		cout << endl;
+	}
+	//for (int i = 1; i <= n; i++) _inv_id[i] = i;
+	for (int i = 1; i <= n; i++) {
+		cout << "preparing(), i=" << i << endl;
+		//if (edg[i].size() != 0)
+		//{
+		//cout << "计算" << node[i].second << endl;
+		prunedBFS(node[i].second);
+
+		//}
+
+	}
+
+	cerr << "pruned times: " << cnt << endl;
+	int label_size = 0;
+	for (int i = 1; i <= n; i++) label_size += label[i].size();
+	cerr << "average label size: " << 1.0*label_size / n << endl;
+
+}
+int query_distance(int u, int v)
+{
+	assert(1 <= u && u <= n && 1 <= v && v <= n);
+	if (_inv_id[u] < _inv_id[v]) swap(u, v);//交换
+	if (u == v) return 0;
+	unordered_map<int, int> dis_u_;
+	for (int i = 0; i < (int)label[u].size(); i++) {
+		dis_u_[label[u][i].first] = label[u][i].second;
+	}
+	int ans = inf;
+	for (int i = 0; i < (int)label[v].size(); i++) {
+		if (dis_u_.count(label[v][i].first)) {
+			ans = min(ans, dis_u_[label[v][i].first] + label[v][i].second);
+		}
+	}
+	return ans;
+}
+void test(ofstream &ofs)
+{
+	for (int i = 1; i <= n; i++) {
+		for (int j = 1; j <= n; j++) {
+			ofs << i << " " << j << " " << query_distance(i, j) << endl;
+		}
+	}
+}
+void Refpool() {
+	int z, dist;
+	for (int i = 1; i <= k; i++) {
+		//cout << "第" << i << "个参考节点" << endl;
+		z = node[i].second;//node前k个最高度
+		//cout << "z=" << z << endl;
+		Lz[i].emplace_back(z, 0);//Lz[i][0]标记z
+
+		for (int i = 0; i < (int)label[z].size(); i++)
+			len_from_vk[label[z][i].first] = label[z][i].second;
+
+		for (int j = 1; j <= n; j++)
+			Lz[i].emplace_back(j, query_for_pruning(z, j));
+		sort(Lz[i].begin() + 1, Lz[i].end());
+		//cout << "Lz[" << i << "][" << n << "].second=" << Lz[i][n].second << endl;
+		//得出参考节点的ecc
+		eccbound[z].first = Lz[i][n].second;
+		eccbound[z].second = Lz[i][n].second;
+		//修改其他节点边界
+		for (int j = 1; j <= n; j++) {
+			dist = query_for_pruning(z, j);
+			// << "dist(" << z << "," << j << ")=" << dist << endl;
+			if (dist != 0) {
+				eccbound[j].first = min(eccbound[j].first, eccbound[z].first + dist);
+				eccbound[j].second = max(eccbound[j].second, max(dist, eccbound[j].second - dist));
+				//cout << "ref_eccbound[" << id[j] << "].second=" << eccbound[j].second << endl;
+				//cout << "ref_eccbound[" << id[j] << "].first=" << eccbound[j].first << endl;
+			}
+		}
+		for (int i = 0; i < (int)label[z].size(); i++)
+			len_from_vk[label[z][i].first] = inf;
+	}
+
+}
+int query_refpool(int x) {
+	//查询距x最近的参考节点
+	int z, dist, ans = inf;
+	for (int i = 1; i <= k; i++) {
+		dist = query_for_pruning(x, Lz[i][0].first);
+		if (ans > dist) {
+			ans = dist;
+			z = i;
+		}
+	}
+	return z;
+}
+int EccentricityOneNode(int x) {
+	int dist, z, flag/*λ*/, p = 0, dist_x_z;
+	
+	for (int i = 0; i < (int)label[x].size(); i++)
+		len_from_vk[label[x][i].first] = label[x][i].second;
+
+	z = query_refpool(x);//Lz[z]是x最近参考点
+
+	for (int i = n; i >= 1; i--) {
+		flag = Lz[z][i - 1].second;//λ
+		dist = query_for_pruning(x, Lz[z][i].first);
+		dist_x_z = query_for_pruning(x, z);
+		//cout << "flag=" << flag << endl;
+		//cout << "dist(x,ui)=" << dist << endl;
+		//cout << "dist_x_z=" << dist_x_z << endl;
+		p = max(p, dist);//V'部分偏心率
+		eccbound[x].second = max(eccbound[x].second, p);
+		eccbound[x].first = min(eccbound[x].first, max(p, dist_x_z + flag));
+		//cout << "eccbound[" << id[x] << "].second=" << eccbound[x].second << endl;
+		//cout << "eccbound[" << id[x] << "].first=" << eccbound[x].first << endl;
+		if (eccbound[x].first == eccbound[x].second) {
+			for (int i = 0; i < (int)label[x].size(); i++)
+				len_from_vk[label[x][i].first] = inf;
+			return eccbound[x].second;
+		}
+	}
+	for (int i = 0; i < (int)label[x].size(); i++)
+		len_from_vk[label[x][i].first] = inf;
+
+	return eccbound[x].second;
+}
+using namespace std;
+int main()
+{
+	clock_t start, end, start_1, end_1;
+	string str = "D:\\ca-AstroPh.mtx";//CA-HepPh,ca-AstroPh.mtx
+	ifstream ifs;
+	ifs.open(str);
+	//PLL pll;
+	graph_init(ifs);
+
+	start_1 = clock();
+	preparing();
+	end_1 = clock();
+	/*for (int i = 1; i <= n; i++)
+	{
+		cout << "i=" << id[i] << " ";
+		for (int j = 0; j < (int)label[i].size(); j++)
+			cout << id[label[i][j].first] << "," << (int)label[i][j].second << " ";
+		cout << endl;
+	}*/
+	Refpool();
+	start = clock();
+	for (int i = 1; i <= n; i++) {
+		if (eccbound[i].first == eccbound[i].second)
+			continue;
+		cout << "计算ecc[" << i << "]" << endl;
+		EccentricityOneNode(i);
+	}
+	end = clock();
+
+	for (int i = 1; i <= n; i++)
+		cout << "ecc[" << id[i] << "]=" << eccbound[i].first << endl;
+
+	double endtime_1 = (double)(end_1 - start_1) / CLOCKS_PER_SEC;
+	double endtime = (double)(end - start) / CLOCKS_PER_SEC;
+	//cout << "Total t   ime:" << endtime << endl;		//s为单位
+	cout << "PLL time:" << endtime_1 * 1000 << "ms" << endl;	//ms为单位
+	cout << "EccOneNode time:" << endtime * 1000 << "ms" << endl;	//ms为单位
+	system("pause");
+	return 0;
+}
